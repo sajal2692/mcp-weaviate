@@ -1,0 +1,15 @@
+[project]
+name = "mcp-weaviate"
+version = "0.1.0"
+description = "MCP server for Weaviate vector database operations"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.2.1",
+    "fastmcp>=2.11.3",
+    "python-dotenv>=1.1.1",
+    "weaviate-client>=4.16.9",
+]
+
+[project.scripts]
+mcp-weaviate = "main:main"
