@@ -3,7 +3,7 @@ from fastmcp import Client
 
 async def test_tools():
     """Test the MCP server tools"""
-    client = Client("main.py")
+    client = Client("src/main.py")
     
     async with client:
         print("=== Testing MCP Server ===\n")

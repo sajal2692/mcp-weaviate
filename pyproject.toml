@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "mcp-weaviate"
 version = "0.1.0"
@@ -12,4 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-weaviate = "main:main"
+mcp-weaviate = "src.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
