@@ -28,7 +28,6 @@ def register_tools(mcp: Any) -> None:
             }
             for i in range(1, min(limit + 1, 6))
         ]
-
         return {
             "results": mock_results,
             "total": len(mock_results),

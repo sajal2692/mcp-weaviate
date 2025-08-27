@@ -6,7 +6,6 @@ from fastmcp import Client
 async def test_tools() -> None:
     """Test the MCP server tools"""
     client = Client("src/main.py")
-
     async with client:
         print("=== Testing MCP Server ===\n")
 
