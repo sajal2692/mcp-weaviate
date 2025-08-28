@@ -66,54 +66,125 @@ mcp-weaviate = "src.main:cli"
 ### 3. Configuration Management
 
 `src/config.py`:
-- Environment variable parsing
-- CLI argument handling with Click
-- Configuration validation with Pydantic
-- Support for multiple authentication methods:
+- Environment variable parsing with python-dotenv
+- CLI argument handling with Click decorators
+- Configuration validation with Pydantic dataclasses
+- Support for both local and cloud Weaviate connections
+- Multiple authentication methods:
   - API Key authentication
-  - OIDC authentication
-  - Anonymous access
+  - Anonymous access for local development
+  - Third-party API keys (Cohere, OpenAI, etc.)
 
-Configuration options:
+Enhanced configuration options:
 ```python
+@dataclass
 class WeaviateConfig:
-    url: str                    # Weaviate instance URL
-    api_key: Optional[str]      # API key for authentication
-    timeout: int = 30           # Request timeout in seconds
-    grpc_port: Optional[int]    # gRPC port for faster operations
-    additional_headers: Dict    # Custom headers
-    startup_period: int = 5     # Connection retry period
+    # Connection type
+    connection_type: str = "local"              # "local" or "cloud"
+
+    # Local connection parameters
+    host: str = "localhost"                     # Local host
+    port: int = 8080                           # HTTP port
+    grpc_port: int = 50051                     # gRPC port for faster operations
+
+    # Cloud connection parameters
+    cluster_url: Optional[str] = None          # WCS cluster URL
+
+    # Authentication
+    api_key: Optional[str] = None              # Weaviate API key
+
+    # Additional configuration
+    timeout_init: int = 30                     # Initialization timeout
+    timeout_query: int = 60                    # Query timeout
+    timeout_insert: int = 120                  # Insert timeout
+    additional_headers: Dict[str, str] = field(default_factory=dict)  # Custom headers
+    startup_period: int = 5                    # Connection retry period
+
+    # Third-party API keys
+    cohere_api_key: Optional[str] = None       # For Cohere integration
+    openai_api_key: Optional[str] = None       # For OpenAI integration
 ```
 
 ### 4. Weaviate Client Wrapper
 
 `src/weaviate_client.py`:
 ```python
-class WeaviateClient:
+class WeaviateClientManager:
     """Wrapper for Weaviate operations with connection management"""
-    
+
     def __init__(self, config: WeaviateConfig):
-        # Initialize connection with retry logic
-        # Setup authentication
-        # Configure timeout and headers
-        pass
-    
+        self.config = config
+        self.client = None
+        self._connected = False
+
     async def connect(self):
-        """Establish connection to Weaviate"""
-        pass
-    
+        """Establish connection to Weaviate based on configuration"""
+        if self.config.connection_type == "local":
+            # Local connection with optional authentication
+            additional_config = AdditionalConfig(
+                timeout=Timeout(
+                    init=self.config.timeout_init,
+                    query=self.config.timeout_query,
+                    insert=self.config.timeout_insert
+                )
+            )
+
+            auth_credentials = None
+            if self.config.api_key:
+                auth_credentials = Auth.api_key(self.config.api_key)
+
+            self.client = weaviate.connect_to_local(
+                host=self.config.host,
+                port=self.config.port,
+                grpc_port=self.config.grpc_port,
+                auth_credentials=auth_credentials,
+                headers=self.config.additional_headers,
+                additional_config=additional_config
+            )
+
+        elif self.config.connection_type == "cloud":
+            # Cloud connection (Weaviate Cloud Services)
+            if not self.config.cluster_url or not self.config.api_key:
+                raise ValueError("cluster_url and api_key required for cloud connection")
+
+            additional_config = AdditionalConfig(
+                timeout=Timeout(
+                    init=self.config.timeout_init,
+                    query=self.config.timeout_query,
+                    insert=self.config.timeout_insert
+                )
+            )
+
+            self.client = weaviate.connect_to_weaviate_cloud(
+                cluster_url=self.config.cluster_url,
+                auth_credentials=Auth.api_key(self.config.api_key),
+                headers=self.config.additional_headers,
+                additional_config=additional_config
+            )
+
+        # Test connection
+        if not self.client.is_ready():
+            raise ConnectionError("Failed to establish connection to Weaviate")
+
+        self._connected = True
+
     async def disconnect(self):
         """Clean up connections"""
-        pass
-    
-    # Core operations
-    async def search(self, ...):
-        """Perform vector/hybrid search"""
-        pass
-    
-    async def get_schema(self):
-        """Retrieve database schema"""
-        pass
+        if self.client:
+            self.client.close()
+            self._connected = False
+
+    def is_connected(self) -> bool:
+        """Check if client is connected"""
+        return self._connected and self.client and self.client.is_ready()
+
+    # Context manager support
+    async def __aenter__(self):
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.disconnect()
 ```
 
 ### 5. MCP Tools Implementation
@@ -228,8 +299,8 @@ async def get_statistics(
 import asyncio
 import click
 from fastmcp import FastMCP
-from src.config import WeaviateConfig, load_config
-from src.weaviate_client import WeaviateClient
+from src.config import WeaviateConfig
+from src.weaviate_client import WeaviateClientManager
 from src.tools import register_tools
 
 # Initialize FastMCP server
@@ -239,23 +310,63 @@ mcp = FastMCP("Weaviate MCP Server")
 weaviate_client = None
 
 @click.command()
-@click.option("--url", envvar="WEAVIATE_URL", help="Weaviate instance URL")
+@click.option(
+    "--connection-type",
+    type=click.Choice(["local", "cloud"]),
+    default="local",
+    help="Connection type: local for Docker/self-hosted, cloud for WCS"
+)
+@click.option("--host", default="localhost", help="Host for local connection")
+@click.option("--port", default=8080, type=int, help="HTTP port for local connection")
+@click.option("--grpc-port", default=50051, type=int, help="gRPC port for local connection")
+@click.option("--cluster-url", envvar="WEAVIATE_CLUSTER_URL", help="Weaviate Cloud Services cluster URL")
 @click.option("--api-key", envvar="WEAVIATE_API_KEY", help="API key for authentication")
-@click.option("--timeout", default=30, help="Request timeout in seconds")
-@click.option("--grpc-port", type=int, help="gRPC port for faster operations")
-def cli(url, api_key, timeout, grpc_port):
+@click.option("--timeout-init", default=30, type=int, help="Initialization timeout in seconds")
+@click.option("--timeout-query", default=60, type=int, help="Query timeout in seconds")
+@click.option("--timeout-insert", default=120, type=int, help="Insert timeout in seconds")
+@click.option("--cohere-api-key", envvar="COHERE_API_KEY", help="Cohere API key for embeddings")
+@click.option("--openai-api-key", envvar="OPENAI_API_KEY", help="OpenAI API key for embeddings")
+def cli(
+    connection_type, host, port, grpc_port, cluster_url, api_key,
+    timeout_init, timeout_query, timeout_insert, cohere_api_key, openai_api_key
+):
     """Weaviate MCP Server - Interact with Weaviate via MCP"""
-    
-    # Load configuration
-    config = load_config(url, api_key, timeout, grpc_port)
-    
-    # Initialize client
+
+    # Build additional headers for third-party API keys
+    additional_headers = {}
+    if cohere_api_key:
+        additional_headers["X-Cohere-Api-Key"] = cohere_api_key
+    if openai_api_key:
+        additional_headers["X-OpenAI-Api-Key"] = openai_api_key
+
+    # Create configuration
+    config = WeaviateConfig(
+        connection_type=connection_type,
+        host=host,
+        port=port,
+        grpc_port=grpc_port,
+        cluster_url=cluster_url,
+        api_key=api_key,
+        timeout_init=timeout_init,
+        timeout_query=timeout_query,
+        timeout_insert=timeout_insert,
+        additional_headers=additional_headers,
+        cohere_api_key=cohere_api_key,
+        openai_api_key=openai_api_key
+    )
+
+    # Validate configuration
+    if connection_type == "cloud" and (not cluster_url or not api_key):
+        click.echo("Error: --cluster-url and --api-key are required for cloud connections", err=True)
+        return
+
+    # Initialize client manager
     global weaviate_client
-    weaviate_client = WeaviateClient(config)
-    
+    weaviate_client = WeaviateClientManager(config)
+
     # Register tools with the server
     register_tools(mcp, weaviate_client)
-    
+
     # Run the server
     mcp.run()
 
@@ -263,7 +374,69 @@ if __name__ == "__main__":
     cli()
 ```
 
-### 7. Smithery Configuration
+### 7. Configuration Examples
+
+#### Local Weaviate (Docker) Configuration
+
+For Claude Desktop config (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "mcp-weaviate": {
+      "command": "uvx",
+      "args": [
+        "mcp-weaviate",
+        "--connection-type", "local",
+        "--host", "localhost",
+        "--port", "8080",
+        "--grpc-port", "50051"
+      ]
+    }
+  }
+}
+```
+
+#### Weaviate Cloud Services (WCS) Configuration
+
+```json
+{
+  "mcpServers": {
+    "mcp-weaviate": {
+      "command": "uvx",
+      "args": [
+        "mcp-weaviate",
+        "--connection-type", "cloud",
+        "--cluster-url", "https://your-cluster.weaviate.network",
+        "--api-key", "${WEAVIATE_API_KEY}"
+      ],
+      "env": {
+        "WEAVIATE_API_KEY": "your-api-key-here",
+        "COHERE_API_KEY": "your-cohere-key-here"
+      }
+    }
+  }
+}
+```
+
+#### Development Configuration
+
+```json
+{
+  "mcpServers": {
+    "mcp-weaviate": {
+      "command": "uv",
+      "args": [
+        "--directory", "/path/to/mcp-weaviate",
+        "run",
+        "python", "src/main.py",
+        "--connection-type", "local"
+      ]
+    }
+  }
+}
+```
+
+### 8. Smithery Configuration
 
 `smithery.yaml`:
 ```yaml
@@ -272,50 +445,114 @@ startCommand:
   type: stdio
   configSchema:
     type: object
-    required: ["weaviateUrl"]
     properties:
-      weaviateUrl:
+      connectionType:
         type: string
-        description: Weaviate instance URL (e.g., http://localhost:8080)
+        enum: ["local", "cloud"]
+        default: "local"
+        description: Connection type (local for Docker/self-hosted, cloud for WCS)
+      host:
+        type: string
+        default: "localhost"
+        description: Host for local connection
+      port:
+        type: number
+        default: 8080
+        description: HTTP port for local connection
+      grpcPort:
+        type: number
+        default: 50051
+        description: gRPC port for local connection
+      clusterUrl:
+        type: string
+        description: Weaviate Cloud Services cluster URL
       weaviateApiKey:
         type: string
         default: ""
         description: API key for Weaviate authentication
-      timeout:
+      cohereApiKey:
+        type: string
+        default: ""
+        description: Cohere API key for embeddings (optional)
+      openaiApiKey:
+        type: string
+        default: ""
+        description: OpenAI API key for embeddings (optional)
+      timeoutInit:
         type: number
         default: 30
-        description: Request timeout in seconds
-      grpcPort:
+        description: Initialization timeout in seconds
+      timeoutQuery:
         type: number
-        description: gRPC port for faster operations (optional)
-      searchLimit:
+        default: 60
+        description: Query timeout in seconds
+      timeoutInsert:
         type: number
-        default: 10
-        description: Default limit for search results
-  
+        default: 120
+        description: Insert timeout in seconds
+
   commandFunction: |
-    (config) => ({
-      command: 'uv',
-      args: ['run', 'python', 'src/main.py'],
-      env: {
-        WEAVIATE_URL: config.weaviateUrl,
-        WEAVIATE_API_KEY: config.weaviateApiKey || '',
-        WEAVIATE_TIMEOUT: String(config.timeout),
-        WEAVIATE_GRPC_PORT: config.grpcPort ? String(config.grpcPort) : '',
-        WEAVIATE_SEARCH_LIMIT: String(config.searchLimit)
+    (config) => {
+      const args = [
+        'mcp-weaviate',
+        '--connection-type', config.connectionType || 'local'
+      ];
+
+      if (config.connectionType === 'local') {
+        args.push('--host', config.host || 'localhost');
+        args.push('--port', String(config.port || 8080));
+        args.push('--grpc-port', String(config.grpcPort || 50051));
+      } else if (config.connectionType === 'cloud') {
+        if (config.clusterUrl) {
+          args.push('--cluster-url', config.clusterUrl);
+        }
       }
-    })
-  
+
+      if (config.timeoutInit) {
+        args.push('--timeout-init', String(config.timeoutInit));
+      }
+      if (config.timeoutQuery) {
+        args.push('--timeout-query', String(config.timeoutQuery));
+      }
+      if (config.timeoutInsert) {
+        args.push('--timeout-insert', String(config.timeoutInsert));
+      }
+
+      const env = {};
+      if (config.weaviateApiKey) {
+        env.WEAVIATE_API_KEY = config.weaviateApiKey;
+      }
+      if (config.cohereApiKey) {
+        env.COHERE_API_KEY = config.cohereApiKey;
+      }
+      if (config.openaiApiKey) {
+        env.OPENAI_API_KEY = config.openaiApiKey;
+      }
+      if (config.clusterUrl) {
+        env.WEAVIATE_CLUSTER_URL = config.clusterUrl;
+      }
+
+      return {
+        command: 'uvx',
+        args: args,
+        env: env
+      };
+    }
+
   exampleConfig:
-    weaviateUrl: "http://localhost:8080"
+    connectionType: "local"
+    host: "localhost"
+    port: 8080
+    grpcPort: 50051
     weaviateApiKey: ""
-    timeout: 30
-    searchLimit: 10
+    timeoutInit: 30
+    timeoutQuery: 60
+    timeoutInsert: 120
 ```
 
-### 8. Error Handling Strategy
+### 9. Error Handling Strategy
 
-Implement comprehensive error handling:
+Implement comprehensive error handling for both local and cloud connections:
 - Connection errors with retry logic
 - Authentication failures with clear messages
 - Query validation errors
@@ -323,7 +560,7 @@ Implement comprehensive error handling:
 - Rate limiting awareness
 - Graceful degradation for missing features
 
-### 9. Testing Strategy
+### 10. Testing Strategy
 
 #### Unit Tests
 - Test each tool independently
@@ -353,7 +590,7 @@ async def test_search():
         assert result["success"]
 ```
 
-### 10. Documentation Structure
+### 11. Documentation Structure
 
 #### README.md sections:
 1. **Overview** - What the MCP server does
@@ -372,7 +609,7 @@ Each tool should include:
 - Example requests and responses
 - Common error conditions
 
-### 11. Advanced Features (Future Enhancements)
+### 12. Advanced Features (Future Enhancements)
 
 - **Caching Layer**: Redis/in-memory caching for frequent queries
 - **Streaming Responses**: For large result sets
@@ -433,12 +670,12 @@ Each tool should include:
   - Basic project structure
   - Core tools implementation
   - Configuration management
-  
+
 - **Phase 2** (Testing & Polish): 1-2 days
   - Comprehensive testing
   - Error handling refinement
   - Documentation
-  
+
 - **Phase 3** (Deployment): 1 day
   - Smithery configuration
   - Package publication
