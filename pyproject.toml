@@ -73,12 +73,16 @@ warn_unreachable = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["weaviate.*", "fastmcp.*"]
+module = ["weaviate.*", "fastmcp.*", "click", "dotenv"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["src.tools"]
+module = ["src.tools", "src.main"]
 disable_error_code = ["misc"]
+
+[[tool.mypy.overrides]]
+module = ["test_config"]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
