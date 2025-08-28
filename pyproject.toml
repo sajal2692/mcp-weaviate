@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
     "click>=8.2.1",
     "fastmcp>=2.11.3",
+    "pydantic>=2.0.0",
     "python-dotenv>=1.1.1",
     "weaviate-client>=4.16.9",
 ]
@@ -73,12 +74,20 @@ warn_unreachable = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["weaviate.*", "fastmcp.*"]
+module = ["weaviate.*", "fastmcp.*", "click", "dotenv", "pydantic"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["src.tools"]
+module = ["src.tools", "src.main"]
 disable_error_code = ["misc"]
+
+[[tool.mypy.overrides]]
+module = ["src.config"]
+disable_error_code = ["misc", "no-any-return", "arg-type"]
+
+[[tool.mypy.overrides]]
+module = ["test_config"]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

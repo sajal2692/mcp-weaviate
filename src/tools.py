@@ -1,8 +1,31 @@
 from typing import Any
 
+from src.config import WeaviateConfig
 
-def register_tools(mcp: Any) -> None:
+
+def register_tools(mcp: Any, config: WeaviateConfig) -> None:
     """Register all MCP tools with the FastMCP server."""
+
+    @mcp.tool
+    def get_config() -> dict[str, Any]:
+        """Get the current Weaviate configuration (for testing)."""
+        return {
+            "connection_type": config.connection_type,
+            "host": config.host,
+            "port": config.port,
+            "grpc_port": config.grpc_port,
+            "cluster_url": config.cluster_url,
+            "api_key": "***" if config.api_key else None,
+            "timeout_init": config.timeout_init,
+            "timeout_query": config.timeout_query,
+            "timeout_insert": config.timeout_insert,
+            "startup_period": config.startup_period,
+            "cohere_api_key": "***" if config.cohere_api_key else None,
+            "openai_api_key": "***" if config.openai_api_key else None,
+            "additional_headers": {k: "***" for k in config.additional_headers.keys()}
+            if config.additional_headers
+            else {},
+        }
 
     @mcp.tool
     def greet(name: str) -> str:
