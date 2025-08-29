@@ -86,10 +86,30 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                             prop_info["description"] = prop.description
                         properties.append(prop_info)
 
-                return {
+                # Add multi-tenancy information
+                multi_tenancy_enabled = client_manager.is_multi_tenancy_enabled(
+                    collection_name
+                )
+                schema_info = {
                     "collection": collection_name,
                     "properties": properties,
+                    "multi_tenancy_enabled": multi_tenancy_enabled,
                 }
+
+                # Add tenant information if multi-tenancy is enabled
+                if multi_tenancy_enabled:
+                    tenants = client_manager.get_tenant_list(collection_name)
+                    schema_info["tenant_count"] = len(tenants)
+
+                    # Check for auto_tenant_creation if available in config
+                    if hasattr(config, "multi_tenancy_config") and hasattr(
+                        config.multi_tenancy_config, "auto_tenant_creation"
+                    ):
+                        schema_info["auto_tenant_creation"] = (
+                            config.multi_tenancy_config.auto_tenant_creation
+                        )
+
+                return schema_info
             else:
                 # Get full schema
                 return client_manager.get_schema()
@@ -107,12 +127,21 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
 
     @mcp.tool
     def search_vector(
-        query: str, collection_name: str = "Article", limit: int = 5
+        query: str,
+        collection_name: str = "Article",
+        tenant_id: str | None = None,
+        limit: int = 5,
     ) -> dict[str, Any]:
         """Search for objects in Weaviate using vector similarity."""
         try:
-            client = client_manager.get_client()
-            collection = client.collections.get(collection_name)
+            # Use appropriate method based on whether tenant_id is provided
+            if tenant_id:
+                collection = client_manager.get_collection_with_tenant(
+                    collection_name, tenant_id
+                )
+            else:
+                client = client_manager.get_client()
+                collection = client.collections.get(collection_name)
 
             # Perform vector search using the query text
             response = collection.query.near_text(
@@ -138,6 +167,7 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                 "total": len(results),
                 "query": query,
                 "collection_name": collection_name,
+                "tenant_id": tenant_id,
             }
 
         except Exception as e:
@@ -148,16 +178,26 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                 "total": 0,
                 "query": query,
                 "collection_name": collection_name,
+                "tenant_id": tenant_id,
             }
 
     @mcp.tool
     def get_collection_objects(
-        collection_name: str, limit: int = 10, offset: int = 0
+        collection_name: str,
+        tenant_id: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> dict[str, Any]:
         """Get objects from a specific collection."""
         try:
-            client = client_manager.get_client()
-            collection = client.collections.get(collection_name)
+            # Use appropriate method based on whether tenant_id is provided
+            if tenant_id:
+                collection = client_manager.get_collection_with_tenant(
+                    collection_name, tenant_id
+                )
+            else:
+                client = client_manager.get_client()
+                collection = client.collections.get(collection_name)
 
             response = collection.query.fetch_objects(limit=limit, offset=offset)
 
@@ -175,6 +215,7 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                 "results": results,
                 "total": len(results),
                 "collection_name": collection_name,
+                "tenant_id": tenant_id,
                 "limit": limit,
                 "offset": offset,
             }
@@ -188,6 +229,49 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                 "results": [],
                 "total": 0,
                 "collection_name": collection_name,
+                "tenant_id": tenant_id,
+            }
+
+    @mcp.tool
+    def is_multi_tenancy_enabled(collection_name: str) -> dict[str, Any]:
+        """Check if a collection has multi-tenancy enabled."""
+        try:
+            enabled = client_manager.is_multi_tenancy_enabled(collection_name)
+            return {
+                "collection_name": collection_name,
+                "multi_tenancy_enabled": enabled,
+            }
+        except Exception as e:
+            logger.error(
+                f"Error checking multi-tenancy status for {collection_name}: {e}"
+            )
+            return {
+                "error": str(e),
+                "collection_name": collection_name,
+                "multi_tenancy_enabled": False,
+            }
+
+    @mcp.tool
+    def get_tenant_list(collection_name: str) -> dict[str, Any]:
+        """Get list of tenants for a collection."""
+        try:
+            tenants = client_manager.get_tenant_list(collection_name)
+            multi_tenancy_enabled = client_manager.is_multi_tenancy_enabled(
+                collection_name
+            )
+            return {
+                "collection_name": collection_name,
+                "multi_tenancy_enabled": multi_tenancy_enabled,
+                "tenants": tenants,
+                "tenant_count": len(tenants),
+            }
+        except Exception as e:
+            logger.error(f"Error getting tenant list for {collection_name}: {e}")
+            return {
+                "error": str(e),
+                "collection_name": collection_name,
+                "tenants": [],
+                "tenant_count": 0,
             }
 
     @mcp.tool

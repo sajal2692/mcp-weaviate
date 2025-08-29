@@ -86,6 +86,53 @@ class WeaviateClientManager:
             logger.error(f"Error checking readiness: {e}")
             return False
 
+    def get_collection(self, collection_name: str) -> Any:
+        """Get collection object without tenant context."""
+        client = self.get_client()
+        return client.collections.get(collection_name)
+
+    def get_collection_with_tenant(self, collection_name: str, tenant_id: str) -> Any:
+        """Get collection object with tenant context."""
+        client = self.get_client()
+        base_collection = client.collections.get(collection_name)
+        return base_collection.with_tenant(tenant_id)
+
+    def is_multi_tenancy_enabled(self, collection_name: str) -> bool:
+        """Check if collection has multi-tenancy enabled."""
+        try:
+            client = self.get_client()
+            collection = client.collections.get(collection_name)
+            config = collection.config.get()
+
+            if hasattr(config, "multi_tenancy_config"):
+                return bool(config.multi_tenancy_config.enabled)
+            return False
+        except Exception as e:
+            logger.error(
+                f"Error checking multi-tenancy status for {collection_name}: {e}"
+            )
+            return False
+
+    def get_tenant_list(self, collection_name: str) -> list[str]:
+        """Get list of tenant names for a collection."""
+        try:
+            if not self.is_multi_tenancy_enabled(collection_name):
+                return []
+
+            client = self.get_client()
+            collection = client.collections.get(collection_name)
+            tenants = collection.tenants.get()
+
+            # tenants.get() returns a dict where keys are tenant names
+            if isinstance(tenants, dict):
+                return list(tenants.keys())
+            else:
+                # Fallback for other formats
+                return [t.name if hasattr(t, "name") else str(t) for t in tenants]
+        except Exception as e:
+            logger.error(f"Error getting tenant list for {collection_name}: {e}")
+            return []
+
     def get_schema(self) -> dict[str, Any]:
         """Get the current schema from Weaviate."""
         try:
