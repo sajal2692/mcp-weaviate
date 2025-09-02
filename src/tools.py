@@ -1,6 +1,8 @@
 import logging
 from typing import Any
 
+from weaviate.classes.query import MetadataQuery
+
 from src.config import WeaviateConfig
 from src.weaviate_client import WeaviateClientManager
 
@@ -126,9 +128,9 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                 return {"error": str(e), "collections": []}
 
     @mcp.tool
-    def search_vector(
+    def semantic_search(
         query: str,
-        collection_name: str = "Article",
+        collection_name: str,
         tenant_id: str | None = None,
         limit: int = 5,
     ) -> dict[str, Any]:
@@ -145,7 +147,7 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
 
             # Perform vector search using the query text
             response = collection.query.near_text(
-                query=query, limit=limit, return_metadata=["score"]
+                query=query, limit=limit, return_metadata=MetadataQuery(score=True)
             )
 
             results = []
@@ -180,6 +182,164 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                 "collection_name": collection_name,
                 "tenant_id": tenant_id,
             }
+
+    @mcp.tool
+    def keyword_search(
+        query: str,
+        collection_name: str,
+        tenant_id: str | None = None,
+        limit: int = 5,
+    ) -> dict[str, Any]:
+        """Search for objects in Weaviate using BM25 keyword search."""
+        try:
+            # Use appropriate method based on whether tenant_id is provided
+            if tenant_id:
+                collection = client_manager.get_collection_with_tenant(
+                    collection_name, tenant_id
+                )
+            else:
+                client = client_manager.get_client()
+                collection = client.collections.get(collection_name)
+
+            # Perform BM25 keyword search
+            response = collection.query.bm25(
+                query=query, limit=limit, return_metadata=MetadataQuery(score=True)
+            )
+
+            results = []
+            for obj in response.objects:
+                result: dict[str, Any] = {
+                    "id": str(obj.uuid),
+                    "collection": collection_name,
+                    "properties": obj.properties,
+                }
+
+                # Add score if available
+                if hasattr(obj.metadata, "score") and obj.metadata.score is not None:
+                    result["score"] = float(obj.metadata.score)
+
+                results.append(result)
+
+            return {
+                "results": results,
+                "total": len(results),
+                "query": query,
+                "collection_name": collection_name,
+                "tenant_id": tenant_id,
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Error performing BM25 search on collection {collection_name}: {e}"
+            )
+            return {
+                "error": str(e),
+                "results": [],
+                "total": 0,
+                "query": query,
+                "collection_name": collection_name,
+                "tenant_id": tenant_id,
+            }
+
+    @mcp.tool
+    def hybrid_search(
+        query: str,
+        collection_name: str,
+        tenant_id: str | None = None,
+        alpha: float = 0.3,
+        limit: int = 5,
+    ) -> dict[str, Any]:
+        """Search for objects in Weaviate using hybrid search (combines BM25 and vector search).
+
+        Alpha parameter controls the balance:
+        - alpha=1.0: pure vector search
+        - alpha=0.0: pure keyword (BM25) search
+        - alpha=0.5: balanced hybrid search
+        """
+        try:
+            # Validate alpha parameter
+            if not 0 <= alpha <= 1:
+                return {
+                    "error": "Alpha must be between 0 and 1",
+                    "results": [],
+                    "total": 0,
+                    "query": query,
+                    "collection_name": collection_name,
+                    "tenant_id": tenant_id,
+                    "alpha": alpha,
+                }
+
+            # Use appropriate method based on whether tenant_id is provided
+            if tenant_id:
+                collection = client_manager.get_collection_with_tenant(
+                    collection_name, tenant_id
+                )
+            else:
+                client = client_manager.get_client()
+                collection = client.collections.get(collection_name)
+
+            # Perform hybrid search
+            response = collection.query.hybrid(
+                query=query,
+                alpha=alpha,
+                limit=limit,
+                return_metadata=MetadataQuery(score=True),
+            )
+
+            results = []
+            for obj in response.objects:
+                result: dict[str, Any] = {
+                    "id": str(obj.uuid),
+                    "collection": collection_name,
+                    "properties": obj.properties,
+                }
+
+                # Add score if available
+                if hasattr(obj.metadata, "score") and obj.metadata.score is not None:
+                    result["score"] = float(obj.metadata.score)
+
+                results.append(result)
+
+            return {
+                "results": results,
+                "total": len(results),
+                "query": query,
+                "collection_name": collection_name,
+                "tenant_id": tenant_id,
+                "alpha": alpha,
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Error performing hybrid search on collection {collection_name}: {e}"
+            )
+            return {
+                "error": str(e),
+                "results": [],
+                "total": 0,
+                "query": query,
+                "collection_name": collection_name,
+                "tenant_id": tenant_id,
+                "alpha": alpha,
+            }
+
+    @mcp.tool
+    def search(
+        query: str,
+        collection_name: str,
+        tenant_id: str | None = None,
+        limit: int = 5,
+    ) -> dict[str, Any]:
+        """Search for objects in Weaviate (uses hybrid search by default)."""
+        # This is a wrapper around hybrid_search with default alpha value
+        result: dict[str, Any] = hybrid_search(
+            query=query,
+            collection_name=collection_name,
+            tenant_id=tenant_id,
+            alpha=0.3,  # Default balanced towards keyword search
+            limit=limit,
+        )
+        return result
 
     @mcp.tool
     def get_collection_objects(
