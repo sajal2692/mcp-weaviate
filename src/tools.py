@@ -349,45 +349,17 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
                 "tenant_id": tenant_id,
             }
 
-    @mcp.tool
-    def hybrid_search(
+    def _perform_hybrid_search(
         query: str,
         collection_name: str,
         tenant_id: str | None = None,
         alpha: float = 0.3,
         limit: int = 5,
     ) -> dict[str, Any]:
-        """Search for objects using hybrid search (BM25 + vector).
+        """Internal helper function to perform hybrid search.
 
-        Combines keyword-based BM25 search with semantic vector search
-        using Reciprocal Rank Fusion (RRF) to leverage both exact term
-        matching and semantic similarity. The alpha parameter controls
-        the balance between the two approaches.
-
-        Args:
-            query: The search query text.
-            collection_name: Name of the collection to search in.
-            tenant_id: Optional tenant ID for multi-tenant collections.
-            alpha: Balance between vector and keyword search (0.0-1.0):
-                - 1.0 = pure vector search (100% semantic)
-                - 0.0 = pure BM25 search (100% keyword)
-                - 0.5 = equal weight (50% each)
-                - 0.3 = default (30% vector, 70% keyword)
-            limit: Maximum number of results to return (default: 5).
-
-        Returns:
-            dict: Search results including:
-                - results: list of matching objects with:
-                    - id: object UUID
-                    - collection: collection name
-                    - properties: object properties
-                    - score: combined relevance score
-                - total: number of results returned
-                - query: the original query
-                - collection_name: searched collection
-                - tenant_id: tenant ID if specified
-                - alpha: alpha value used
-                - error: error message if search failed (optional)
+        This function contains the actual hybrid search logic that can be
+        called by both the hybrid_search and search MCP tools.
         """
         try:
             # Validate alpha parameter
@@ -457,6 +429,54 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
             }
 
     @mcp.tool
+    def hybrid_search(
+        query: str,
+        collection_name: str,
+        tenant_id: str | None = None,
+        alpha: float = 0.3,
+        limit: int = 5,
+    ) -> dict[str, Any]:
+        """Search for objects using hybrid search (BM25 + vector).
+
+        Combines keyword-based BM25 search with semantic vector search
+        using Reciprocal Rank Fusion (RRF) to leverage both exact term
+        matching and semantic similarity. The alpha parameter controls
+        the balance between the two approaches.
+
+        Args:
+            query: The search query text.
+            collection_name: Name of the collection to search in.
+            tenant_id: Optional tenant ID for multi-tenant collections.
+            alpha: Balance between vector and keyword search (0.0-1.0):
+                - 1.0 = pure vector search (100% semantic)
+                - 0.0 = pure BM25 search (100% keyword)
+                - 0.5 = equal weight (50% each)
+                - 0.3 = default (30% vector, 70% keyword)
+            limit: Maximum number of results to return (default: 5).
+
+        Returns:
+            dict: Search results including:
+                - results: list of matching objects with:
+                    - id: object UUID
+                    - collection: collection name
+                    - properties: object properties
+                    - score: combined relevance score
+                - total: number of results returned
+                - query: the original query
+                - collection_name: searched collection
+                - tenant_id: tenant ID if specified
+                - alpha: alpha value used
+                - error: error message if search failed (optional)
+        """
+        return _perform_hybrid_search(
+            query=query,
+            collection_name=collection_name,
+            tenant_id=tenant_id,
+            alpha=alpha,
+            limit=limit,
+        )
+
+    @mcp.tool
     def search(
         query: str,
         collection_name: str,
@@ -479,15 +499,14 @@ def register_tools(mcp: Any, config: WeaviateConfig) -> None:
         Returns:
             dict: Search results (same format as hybrid_search).
         """
-        # This is a wrapper around hybrid_search with default alpha value
-        result: dict[str, Any] = hybrid_search(
+        # Use the helper function with default alpha value
+        return _perform_hybrid_search(
             query=query,
             collection_name=collection_name,
             tenant_id=tenant_id,
             alpha=0.3,  # Default balanced towards keyword search
             limit=limit,
         )
-        return result
 
     @mcp.tool
     def get_collection_objects(
