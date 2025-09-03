@@ -159,6 +159,10 @@ The Weaviate MCP Server currently focuses on comprehensive search capabilities. 
   - Question answering
   - Custom ranking functions
 
+- **Distribution & Deployment**
+  - Smithery registry support
+  - NPX installation compatibility
+
 ## Development
 
 ### Setting up for development
