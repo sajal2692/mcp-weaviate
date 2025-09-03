@@ -1,0 +1,36 @@
+name: Version Check
+
+on:
+  release:
+    types: [created, published]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Extract version from pyproject.toml
+      id: extract_version
+      run: |
+        VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: $VERSION"
+
+    - name: Check if tag matches version
+      run: |
+        TAG_VERSION="${{ github.event.release.tag_name }}"
+        PYPROJECT_VERSION="v${{ steps.extract_version.outputs.version }}"
+
+        echo "Git tag: $TAG_VERSION"
+        echo "pyproject.toml version: $PYPROJECT_VERSION"
+
+        if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+          echo "❌ Error: Tag $TAG_VERSION doesn't match pyproject.toml version $PYPROJECT_VERSION"
+          exit 1
+        fi
+        echo "✅ Tag matches pyproject.toml version"

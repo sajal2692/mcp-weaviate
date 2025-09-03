@@ -1,0 +1,88 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Set up Python
+      run: uv python install 3.12
+
+    - name: Get current version and calculate new version
+      id: version
+      run: |
+        # Get current version
+        CURRENT_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+        echo "Current version: $CURRENT_VERSION"
+
+        # Calculate new version
+        IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+        MAJOR=${VERSION_PARTS[0]}
+        MINOR=${VERSION_PARTS[1]}
+        PATCH=${VERSION_PARTS[2]}
+
+        case "${{ github.event.inputs.version_bump }}" in
+          major)
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            ;;
+          minor)
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            ;;
+          patch)
+            PATCH=$((PATCH + 1))
+            ;;
+        esac
+
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+        echo "New version: $NEW_VERSION"
+        echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+    - name: Update version in pyproject.toml
+      run: |
+        sed -i 's/version = "${{ steps.version.outputs.current }}"/version = "${{ steps.version.outputs.new }}"/' pyproject.toml
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v6
+      with:
+        commit-message: "chore: bump version to ${{ steps.version.outputs.new }}"
+        title: "Release: v${{ steps.version.outputs.new }}"
+        body: |
+          ## Release v${{ steps.version.outputs.new }}
+
+          This PR updates the version from ${{ steps.version.outputs.current }} to ${{ steps.version.outputs.new }}.
+
+          After merging this PR, create a new release with tag `v${{ steps.version.outputs.new }}` to trigger the PyPI publication.
+
+          ### Checklist
+          - [ ] Review changes since last release
+          - [ ] Update CHANGELOG.md (if applicable)
+          - [ ] Merge this PR
+          - [ ] Create GitHub release with tag `v${{ steps.version.outputs.new }}`
+        branch: release/v${{ steps.version.outputs.new }}
+        delete-branch: true
