@@ -1,3 +1,5 @@
+from typing import Literal
+
 import click
 from fastmcp import FastMCP
 
@@ -35,7 +37,7 @@ from src.tools import register_tools
     "--openai-api-key", envvar="OPENAI_API_KEY", help="OpenAI API key for embeddings"
 )
 def main(
-    connection_type: str,
+    connection_type: Literal["local", "cloud"],
     host: str,
     port: int,
     grpc_port: int,
