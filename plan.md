@@ -9,8 +9,7 @@ Build a Model Context Protocol (MCP) server for Weaviate using FastMCP that prov
 - **Framework**: FastMCP 2.0+
 - **Vector Database**: Weaviate
 - **Language**: Python 3.12+
-- **Package Manager**: UV (with NPX support via Smithery)
-- **Deployment**: Smithery-compatible for cross-platform distribution
+- **Package Manager**: UV
 
 ## Implementation Steps
 
@@ -28,7 +27,6 @@ mcp-weaviate/
 │   ├── test_tools.py
 │   └── test_client.py
 ├── pyproject.toml        # Python project configuration
-├── smithery.yaml         # Smithery deployment config
 ├── README.md             # Documentation
 ├── LICENSE
 └── .env.example          # Environment variables template
@@ -436,119 +434,6 @@ For Claude Desktop config (`claude_desktop_config.json`):
 }
 ```
 
-### 8. Smithery Configuration
-
-`smithery.yaml`:
-```yaml
-# Smithery configuration for cross-platform deployment
-startCommand:
-  type: stdio
-  configSchema:
-    type: object
-    properties:
-      connectionType:
-        type: string
-        enum: ["local", "cloud"]
-        default: "local"
-        description: Connection type (local for Docker/self-hosted, cloud for WCS)
-      host:
-        type: string
-        default: "localhost"
-        description: Host for local connection
-      port:
-        type: number
-        default: 8080
-        description: HTTP port for local connection
-      grpcPort:
-        type: number
-        default: 50051
-        description: gRPC port for local connection
-      clusterUrl:
-        type: string
-        description: Weaviate Cloud Services cluster URL
-      weaviateApiKey:
-        type: string
-        default: ""
-        description: API key for Weaviate authentication
-      cohereApiKey:
-        type: string
-        default: ""
-        description: Cohere API key for embeddings (optional)
-      openaiApiKey:
-        type: string
-        default: ""
-        description: OpenAI API key for embeddings (optional)
-      timeoutInit:
-        type: number
-        default: 30
-        description: Initialization timeout in seconds
-      timeoutQuery:
-        type: number
-        default: 60
-        description: Query timeout in seconds
-      timeoutInsert:
-        type: number
-        default: 120
-        description: Insert timeout in seconds
-
-  commandFunction: |
-    (config) => {
-      const args = [
-        'mcp-weaviate',
-        '--connection-type', config.connectionType || 'local'
-      ];
-
-      if (config.connectionType === 'local') {
-        args.push('--host', config.host || 'localhost');
-        args.push('--port', String(config.port || 8080));
-        args.push('--grpc-port', String(config.grpcPort || 50051));
-      } else if (config.connectionType === 'cloud') {
-        if (config.clusterUrl) {
-          args.push('--cluster-url', config.clusterUrl);
-        }
-      }
-
-      if (config.timeoutInit) {
-        args.push('--timeout-init', String(config.timeoutInit));
-      }
-      if (config.timeoutQuery) {
-        args.push('--timeout-query', String(config.timeoutQuery));
-      }
-      if (config.timeoutInsert) {
-        args.push('--timeout-insert', String(config.timeoutInsert));
-      }
-
-      const env = {};
-      if (config.weaviateApiKey) {
-        env.WEAVIATE_API_KEY = config.weaviateApiKey;
-      }
-      if (config.cohereApiKey) {
-        env.COHERE_API_KEY = config.cohereApiKey;
-      }
-      if (config.openaiApiKey) {
-        env.OPENAI_API_KEY = config.openaiApiKey;
-      }
-      if (config.clusterUrl) {
-        env.WEAVIATE_CLUSTER_URL = config.clusterUrl;
-      }
-
-      return {
-        command: 'uvx',
-        args: args,
-        env: env
-      };
-    }
-
-  exampleConfig:
-    connectionType: "local"
-    host: "localhost"
-    port: 8080
-    grpcPort: 50051
-    weaviateApiKey: ""
-    timeoutInit: 30
-    timeoutQuery: 60
-    timeoutInsert: 120
-```
 
 ### 9. Error Handling Strategy
 
@@ -598,7 +483,7 @@ async def test_search():
 3. **Configuration** - Environment variables and CLI options
 4. **Available Tools** - Complete tool reference
 5. **Usage Examples** - Common scenarios
-6. **Deployment** - Smithery deployment guide
+6. **Deployment** - UV/uvx installation guide
 7. **Development** - Contributing and testing
 
 #### Tool Documentation Format:
@@ -650,8 +535,7 @@ Each tool should include:
 - Docker container
 
 ### Production Deployment
-- Smithery registry publication
-- NPX installation support
+- PyPI publication
 - Cloud MCP hosting services
 - Container orchestration (K8s)
 
@@ -662,7 +546,7 @@ Each tool should include:
 - Comprehensive error messages
 - 90%+ test coverage
 - Compatible with Claude Desktop, Cursor, and other MCP clients
-- Published to Smithery registry
+- Published to PyPI
 
 ## Timeline Estimate
 
@@ -677,7 +561,7 @@ Each tool should include:
   - Documentation
 
 - **Phase 3** (Deployment): 1 day
-  - Smithery configuration
+  - PyPI configuration
   - Package publication
   - Usage examples
 
