@@ -91,12 +91,12 @@ Add the Weaviate MCP server to your MCP settings file (typically `claude_desktop
 
 | Option | Description | Default | Environment Variable |
 |--------|-------------|---------|---------------------|
-| `--connection-type` | Connection type: "local" or "cloud" | local | - |
-| `--host` | Host for local connection | localhost | - |
-| `--port` | HTTP port for local connection | 8080 | - |
-| `--grpc-port` | gRPC port for local connection | 50051 | - |
-| `--cluster-url` | Weaviate Cloud Services URL | - | WEAVIATE_CLUSTER_URL |
-| `--api-key` | API key for authentication | - | WEAVIATE_API_KEY |
+| `--connection-type` | Connection type: "local" or "cloud" | *required* | - |
+| `--host` | Host for local connection | *required for local* | - |
+| `--port` | HTTP port for local connection | *required for local* | - |
+| `--grpc-port` | gRPC port for local connection | *required for local* | - |
+| `--cluster-url` | Weaviate Cloud Services URL | *required for cloud* | WEAVIATE_CLUSTER_URL |
+| `--api-key` | API key for authentication | *required for cloud* | WEAVIATE_API_KEY |
 | `--openai-api-key` | OpenAI API key for embeddings | - | OPENAI_API_KEY |
 | `--cohere-api-key` | Cohere API key for embeddings | - | COHERE_API_KEY |
 | `--timeout-init` | Initialization timeout (seconds) | 30 | - |
