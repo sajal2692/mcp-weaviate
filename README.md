@@ -25,28 +25,17 @@ The Weaviate MCP Server currently provides 11 essential tools for interacting wi
 - **`is_multi_tenancy_enabled`** - Check if a collection supports multi-tenancy
 - **`get_tenant_list`** - List all tenants for a multi-tenant collection
 
-## Installation
+## Quick Start
 
-### Using pip
-```bash
-pip install mcp-weaviate
-```
+The MCP server is designed to be used with MCP clients like Claude Desktop. It uses `uvx` for automatic installation and execution - no manual installation required.
 
-### Using uv (recommended)
+Test the server directly:
 ```bash
-uv add mcp-weaviate
-```
-
-### From source
-```bash
-git clone https://github.com/yourusername/mcp-weaviate.git
-cd mcp-weaviate
-uv sync
+uvx mcp-weaviate --help
 ```
 
 ## Requirements
 
-- Python 3.12 or higher
 - Weaviate instance (local or cloud)
 - API keys for embeddings:
   - OpenAI API key (for OpenAI embeddings)
@@ -64,13 +53,9 @@ Add the Weaviate MCP server to your MCP settings file (typically `claude_desktop
 {
   "mcpServers": {
     "mcp-weaviate": {
-      "command": "/path/to/uv",
+      "command": "/path/to/uvx",
       "args": [
-        "--directory",
-        "/path/to/mcp-weaviate",
-        "run",
-        "python",
-        "run_mcp_weaviate.py",
+        "mcp-weaviate",
         "--connection-type", "local",
         "--host", "localhost",
         "--port", "8080",
@@ -88,13 +73,9 @@ Add the Weaviate MCP server to your MCP settings file (typically `claude_desktop
 {
   "mcpServers": {
     "mcp-weaviate": {
-      "command": "/path/to/uv",
+      "command": "/path/to/uvx",
       "args": [
-        "--directory",
-        "/path/to/mcp-weaviate",
-        "run",
-        "python",
-        "run_mcp_weaviate.py",
+        "mcp-weaviate",
         "--connection-type", "cloud",
         "--cluster-url", "https://your-cluster.weaviate.network",
         "--api-key", "YOUR_WEAVIATE_API_KEY",
@@ -105,33 +86,6 @@ Add the Weaviate MCP server to your MCP settings file (typically `claude_desktop
 }
 ```
 
-#### Using Environment Variables (Recommended)
-
-For better security, use environment variables for sensitive values:
-
-```json
-{
-  "mcpServers": {
-    "mcp-weaviate": {
-      "command": "/path/to/uv",
-      "args": [
-        "--directory",
-        "/path/to/mcp-weaviate",
-        "run",
-        "python",
-        "run_mcp_weaviate.py",
-        "--connection-type", "cloud"
-      ],
-      "env": {
-        "WEAVIATE_CLUSTER_URL": "https://your-cluster.weaviate.network",
-        "WEAVIATE_API_KEY": "YOUR_WEAVIATE_API_KEY",
-        "OPENAI_API_KEY": "YOUR_OPENAI_API_KEY",
-        "COHERE_API_KEY": "YOUR_COHERE_API_KEY"
-      }
-    }
-  }
-}
-```
 
 ### Configuration Options
 
@@ -148,124 +102,6 @@ For better security, use environment variables for sensitive values:
 | `--timeout-init` | Initialization timeout (seconds) | 30 | - |
 | `--timeout-query` | Query timeout (seconds) | 60 | - |
 | `--timeout-insert` | Insert timeout (seconds) | 120 | - |
-
-## Getting Started
-
-### 1. Set up your Weaviate instance
-
-For local development using Docker:
-```bash
-docker run -d \
-  --name weaviate \
-  -p 8080:8080 \
-  -p 50051:50051 \
-  --env AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED='true' \
-  --env PERSISTENCE_DATA_PATH='/var/lib/weaviate' \
-  --env QUERY_DEFAULTS_LIMIT=25 \
-  --env DEFAULT_VECTORIZER_MODULE='text2vec-openai' \
-  --env ENABLE_MODULES='text2vec-openai' \
-  --env CLUSTER_HOSTNAME='node1' \
-  cr.weaviate.io/semitechnologies/weaviate:latest
-```
-
-### 2. Configure the MCP server
-
-Add the configuration to your MCP settings as shown above.
-
-### 3. Test the connection
-
-Once configured, you can test the connection using the MCP client:
-
-```python
-# Check connection status
-result = await mcp.call_tool("check_connection")
-print(result)  # {"connected": true, "connection_type": "local", "host": "localhost"}
-
-# List available collections
-collections = await mcp.call_tool("list_collections")
-print(collections)  # {"collections": ["Article", "Product"], "total": 2}
-```
-
-## Usage Examples
-
-### Basic Search
-
-```python
-# Simple search (uses hybrid search by default)
-results = await mcp.call_tool("search", {
-    "query": "machine learning applications",
-    "collection_name": "Article",
-    "limit": 5
-})
-```
-
-### Semantic Search
-
-```python
-# Find semantically similar content
-results = await mcp.call_tool("semantic_search", {
-    "query": "artificial intelligence in healthcare",
-    "collection_name": "Article",
-    "limit": 10
-})
-```
-
-### Keyword Search
-
-```python
-# Exact keyword matching with BM25
-results = await mcp.call_tool("keyword_search", {
-    "query": "Python programming",
-    "collection_name": "Tutorial",
-    "limit": 5
-})
-```
-
-### Hybrid Search with Custom Weighting
-
-```python
-# Balance between semantic and keyword search
-results = await mcp.call_tool("hybrid_search", {
-    "query": "climate change effects",
-    "collection_name": "Research",
-    "alpha": 0.7,  # 70% semantic, 30% keyword
-    "limit": 10
-})
-```
-
-### Working with Multi-Tenant Collections
-
-```python
-# Check if collection supports multi-tenancy
-status = await mcp.call_tool("is_multi_tenancy_enabled", {
-    "collection_name": "UserDocuments"
-})
-
-# Get list of tenants
-tenants = await mcp.call_tool("get_tenant_list", {
-    "collection_name": "UserDocuments"
-})
-
-# Search within a specific tenant
-results = await mcp.call_tool("search", {
-    "query": "project proposals",
-    "collection_name": "UserDocuments",
-    "tenant_id": "tenant-123",
-    "limit": 5
-})
-```
-
-### Schema Inspection
-
-```python
-# Get schema for a specific collection
-schema = await mcp.call_tool("get_schema", {
-    "collection_name": "Product"
-})
-
-# Get complete database schema
-full_schema = await mcp.call_tool("get_schema")
-```
 
 ## Tool Reference
 
@@ -350,16 +186,14 @@ uv run mypy .
 
 ### Running locally
 
+Example:
 ```bash
-# Run the MCP server directly
-uv run python run_mcp_weaviate.py --connection-type local
-
-# Or with all options
-uv run python run_mcp_weaviate.py \
+uv run python -m src.main \
   --connection-type cloud \
   --cluster-url https://your-cluster.weaviate.network \
   --api-key YOUR_API_KEY \
   --openai-api-key YOUR_OPENAI_KEY
+
 ```
 
 ## Contributing
