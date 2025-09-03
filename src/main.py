@@ -9,14 +9,12 @@ from src.tools import register_tools
 @click.option(
     "--connection-type",
     type=click.Choice(["local", "cloud"]),
-    default="local",
+    required=True,
     help="Connection type: local for Docker/self-hosted, cloud for WCS",
 )
-@click.option("--host", default="localhost", help="Host for local connection")
-@click.option("--port", default=8080, type=int, help="HTTP port for local connection")
-@click.option(
-    "--grpc-port", default=50051, type=int, help="gRPC port for local connection"
-)
+@click.option("--host", help="Host for local connection")
+@click.option("--port", type=int, help="HTTP port for local connection")
+@click.option("--grpc-port", type=int, help="gRPC port for local connection")
 @click.option(
     "--cluster-url",
     envvar="WEAVIATE_CLUSTER_URL",
@@ -74,13 +72,7 @@ def main(
         openai_api_key=openai_api_key,
     )
 
-    # Validate configuration
-    if connection_type == "cloud" and (not cluster_url or not api_key):
-        click.echo(
-            "Error: --cluster-url and --api-key are required for cloud connections",
-            err=True,
-        )
-        return
+    # Note: Validation is now handled in WeaviateConfig constructor
 
     # Initialize FastMCP server
     mcp = FastMCP("Weaviate MCP Server")
