@@ -124,11 +124,7 @@ class WeaviateClientManager:
             tenants = collection.tenants.get()
 
             # tenants.get() returns a dict where keys are tenant names
-            if isinstance(tenants, dict):
-                return list(tenants.keys())
-            else:
-                # Fallback for other formats
-                return [t.name if hasattr(t, "name") else str(t) for t in tenants]
+            return list(tenants.keys())
         except Exception as e:
             logger.error(f"Error getting tenant list for {collection_name}: {e}")
             return []
