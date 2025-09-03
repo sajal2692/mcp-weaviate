@@ -19,6 +19,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: read
+      metadata: read
 
     steps:
     - name: Checkout code
@@ -70,6 +72,7 @@ jobs:
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v6
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
         commit-message: "chore: bump version to ${{ steps.version.outputs.new }}"
         title: "Release: v${{ steps.version.outputs.new }}"
         body: |
