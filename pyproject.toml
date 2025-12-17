@@ -74,7 +74,7 @@ warn_unreachable = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["weaviate.*", "fastmcp.*", "click", "dotenv", "pydantic"]
+module = ["weaviate.*", "fastmcp.*", "click", "dotenv", "pydantic", "starlette.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
