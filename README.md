@@ -91,10 +91,13 @@ Add the Weaviate MCP server to your MCP settings file (typically `claude_desktop
 
 | Option | Description | Default | Environment Variable |
 |--------|-------------|---------|---------------------|
+| `--transport` | Transport protocol: "stdio" or "streamable-http" | stdio | - |
+| `--http-host` | Host for HTTP transport | 0.0.0.0 | - |
+| `--http-port` | Port for HTTP transport | 8000 | - |
 | `--connection-type` | Connection type: "local" or "cloud" | *required* | - |
-| `--host` | Host for local connection | *required for local* | - |
-| `--port` | HTTP port for local connection | *required for local* | - |
-| `--grpc-port` | gRPC port for local connection | *required for local* | - |
+| `--host` | Host for local Weaviate connection | *required for local* | - |
+| `--port` | HTTP port for local Weaviate connection | *required for local* | - |
+| `--grpc-port` | gRPC port for local Weaviate connection | *required for local* | - |
 | `--cluster-url` | Weaviate Cloud Services URL | *required for cloud* | WEAVIATE_CLUSTER_URL |
 | `--api-key` | API key for authentication | *required for cloud* | WEAVIATE_API_KEY |
 | `--openai-api-key` | OpenAI API key for embeddings | - | OPENAI_API_KEY |
@@ -102,6 +105,16 @@ Add the Weaviate MCP server to your MCP settings file (typically `claude_desktop
 | `--timeout-init` | Initialization timeout (seconds) | 30 | - |
 | `--timeout-query` | Query timeout (seconds) | 60 | - |
 | `--timeout-insert` | Insert timeout (seconds) | 120 | - |
+
+### Remote Deployment
+
+For deploying the MCP server remotely (e.g., on TrueFoundry, Kubernetes, etc.), use the `streamable-http` transport:
+
+```bash
+mcp-weaviate --transport streamable-http --http-port 8000 --connection-type cloud
+```
+
+This exposes the server on HTTP port 8000 with a `/health` endpoint for health checks.
 
 ## Tool Reference
 

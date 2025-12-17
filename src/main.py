@@ -2,6 +2,8 @@ from typing import Literal
 
 import click
 from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from src.config import WeaviateConfig
 from src.tools import register_tools
@@ -9,14 +11,31 @@ from src.tools import register_tools
 
 @click.command()
 @click.option(
+    "--transport",
+    type=click.Choice(["stdio", "streamable-http"]),
+    default="stdio",
+    help="Transport protocol: stdio (default) for local CLI, streamable-http for remote deployment",
+)
+@click.option(
+    "--http-host",
+    default="0.0.0.0",
+    help="Host for HTTP transport (default: 0.0.0.0)",
+)
+@click.option(
+    "--http-port",
+    type=int,
+    default=8000,
+    help="Port for HTTP transport (default: 8000)",
+)
+@click.option(
     "--connection-type",
     type=click.Choice(["local", "cloud"]),
     required=True,
     help="Connection type: local for Docker/self-hosted, cloud for WCS",
 )
-@click.option("--host", help="Host for local connection")
-@click.option("--port", type=int, help="HTTP port for local connection")
-@click.option("--grpc-port", type=int, help="gRPC port for local connection")
+@click.option("--host", help="Host for local Weaviate connection")
+@click.option("--port", type=int, help="HTTP port for local Weaviate connection")
+@click.option("--grpc-port", type=int, help="gRPC port for local Weaviate connection")
 @click.option(
     "--cluster-url",
     envvar="WEAVIATE_CLUSTER_URL",
@@ -37,6 +56,9 @@ from src.tools import register_tools
     "--openai-api-key", envvar="OPENAI_API_KEY", help="OpenAI API key for embeddings"
 )
 def main(
+    transport: Literal["stdio", "streamable-http"],
+    http_host: str,
+    http_port: int,
     connection_type: Literal["local", "cloud"],
     host: str,
     port: int,
@@ -76,14 +98,25 @@ def main(
 
     # Note: Validation is now handled in WeaviateConfig constructor
 
-    # Initialize FastMCP server
-    mcp = FastMCP("Weaviate MCP Server")
+    # Initialize FastMCP server with stateless_http for remote deployments
+    use_stateless = transport == "streamable-http"
+    mcp = FastMCP("Weaviate MCP Server", stateless_http=use_stateless)
 
     # Register tools with the server
     register_tools(mcp, config)
 
-    # Run the server
-    mcp.run()
+    # Add health endpoint for HTTP transport (useful for load balancers/k8s)
+    if transport == "streamable-http":
+
+        @mcp.custom_route("/health", methods=["GET"])
+        async def health_check(request: Request) -> JSONResponse:
+            return JSONResponse({"status": "ok"})
+
+    # Run the server with configured transport
+    if transport == "stdio":
+        mcp.run()
+    else:
+        mcp.run(transport=transport, host=http_host, port=http_port)
 
 
 if __name__ == "__main__":
